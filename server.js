@@ -1,5 +1,12 @@
 const express = require('express');
 const { Pool } = require('pg');
+const { createRemoteJWKSet, jwtVerify } = require('jose');
+
+const ISSUER = 'https://c94aca5e-27ab-4cdb-b764-b6d4baa28749.ciamlogin.com/c94aca5e-27ab-4cdb-b764-b6d4baa28749/v2.0';
+const JWKS_URI = 'https://fieldlinksauthpoc.ciamlogin.com/c94aca5e-27ab-4cdb-b764-b6d4baa28749/discovery/v2.0/keys';
+const EXPECTED_AUDIENCE = 'b4bc664b-5c2c-4124-8bf9-f6c15a5fcffb';
+
+const jwks = createRemoteJWKSet(new URL(JWKS_URI));
 
 const app = express();
 app.use(express.json());
@@ -11,6 +18,36 @@ const pool = new Pool({
 
 app.get('/healthz', (req, res) => {
   res.status(200).json({ status: 'ok' });
+});
+
+app.get('/verify-token', async (req, res) => {
+  const authHeader = req.get('authorization') || '';
+  const match = authHeader.match(/^Bearer (.+)$/i);
+  if (!match) {
+    return res.status(401).json({ valid: false, error: 'missing or malformed Authorization header' });
+  }
+  const token = match[1];
+
+  try {
+    const { payload } = await jwtVerify(token, jwks, { issuer: ISSUER });
+
+    const aud = payload.aud;
+    const audOk = aud === EXPECTED_AUDIENCE || aud === `api://${EXPECTED_AUDIENCE}`;
+    if (!audOk) {
+      return res.status(401).json({ valid: false, error: `unexpected audience: ${aud}` });
+    }
+
+    res.status(200).json({
+      valid: true,
+      issuer: payload.iss,
+      audience: payload.aud,
+      scp: payload.scp,
+      exp: payload.exp,
+      sub: payload.sub,
+    });
+  } catch (err) {
+    res.status(401).json({ valid: false, error: err.message });
+  }
 });
 
 app.get('/debug/outbound-ip', async (req, res) => {
