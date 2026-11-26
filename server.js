@@ -13,6 +13,16 @@ app.get('/healthz', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+app.get('/debug/outbound-ip', async (req, res) => {
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const data = await r.json();
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/admin/apply-sql', async (req, res) => {
   if (req.get('x-admin-key') !== process.env.ADMIN_KEY) {
     return res.status(401).json({ error: 'unauthorized' });
