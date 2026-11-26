@@ -1,0 +1,13 @@
+{
+  "name": "fieldlinks-verify-backend",
+  "version": "1.0.0",
+  "description": "FieldLinks #209 verification: minimal admin endpoint to apply SQL to Azure Database for PostgreSQL, called from Draftbit via Custom REST API.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}
