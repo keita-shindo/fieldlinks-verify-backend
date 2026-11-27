@@ -1,6 +1,10 @@
 const express = require('express');
 const { Pool } = require('pg');
 const { createRemoteJWKSet, jwtVerify } = require('jose');
+const { BlobServiceClient, generateBlobSASQueryParameters, BlobSASPermissions } = require('@azure/storage-blob');
+
+const CONTAINER_NAME = 'test-files';
+const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
 
 const ISSUER = 'https://c94aca5e-27ab-4cdb-b764-b6d4baa28749.ciamlogin.com/c94aca5e-27ab-4cdb-b764-b6d4baa28749/v2.0';
 const JWKS_URI = 'https://fieldlinksauthpoc.ciamlogin.com/c94aca5e-27ab-4cdb-b764-b6d4baa28749/discovery/v2.0/keys';
@@ -55,6 +59,51 @@ app.get('/debug/outbound-ip', async (req, res) => {
     const r = await fetch('https://api.ipify.org?format=json');
     const data = await r.json();
     res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/blob-sas', async (req, res) => {
+  if (req.get('x-admin-key') !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const filename = req.query.filename;
+  const mode = req.query.mode === 'write' ? 'write' : 'read';
+  if (!filename) {
+    return res.status(400).json({ error: 'filename query param is required' });
+  }
+
+  try {
+    const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+    const blobClient = containerClient.getBlobClient(filename);
+
+    const permissions = new BlobSASPermissions();
+    if (mode === 'write') {
+      permissions.write = true;
+      permissions.create = true;
+    } else {
+      permissions.read = true;
+    }
+
+    const expiresOn = new Date(Date.now() + 10 * 60 * 1000);
+
+    const sasToken = generateBlobSASQueryParameters(
+      {
+        containerName: CONTAINER_NAME,
+        blobName: filename,
+        permissions,
+        expiresOn,
+      },
+      blobServiceClient.credential
+    ).toString();
+
+    res.status(200).json({
+      sasUrl: `${blobClient.url}?${sasToken}`,
+      mode,
+      expiresOn,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
